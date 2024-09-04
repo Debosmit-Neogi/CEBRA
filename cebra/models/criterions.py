@@ -37,6 +37,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 @torch.jit.script
