@@ -34,6 +34,7 @@ import cebra.models.layers as cebra_layers
 from cebra.models import register
 
 
+
 def _check_torch_version(raise_error=False):
     current_version = tuple(
         [int(i) for i in torch.__version__.split(".")[:2] if len(i) > 0])
@@ -255,42 +256,112 @@ class ParameterCountMixin:
             param.numel() for param in self.parameters() if param.requires_grad)
 
 
+# @register("offset10-model")
+# class Offset10Model(_OffsetModel, ConvolutionalModelMixin):
+#     """CEBRA model with a 10 sample receptive field."""
+
+#     def __init__(self, num_neurons, num_units, num_output, normalize=True):
+#         if num_units < 1:
+#             raise ValueError(
+#                 f"Hidden dimension needs to be at least 1, but got {num_units}."
+#             )
+#         super().__init__(
+#             nn.Conv1d(num_neurons, num_units, 2),
+#             nn.GELU(),
+#             cebra_layers._Skip(nn.Conv1d(num_units, num_units, 3), nn.GELU()),
+#             cebra_layers._Skip(nn.Conv1d(num_units, num_units, 3), nn.GELU()),
+#             cebra_layers._Skip(nn.Conv1d(num_units, num_units, 3), nn.GELU()),
+#             nn.Conv1d(num_units, num_output, 3),
+#             num_input=num_neurons,
+#             num_output=num_output,
+#             normalize=normalize,
+#         )
+
+#     def get_offset(self) -> cebra.data.datatypes.Offset:
+#         """See :py:meth:`~.Model.get_offset`"""
+#         return cebra.data.Offset(5, 5)
+
+
+# @register("offset10-model-mse")
+# class Offset10ModelMSE(Offset10Model):
+#     """Symmetric model with 10 sample receptive field, without normalization.
+
+#     Suitable for use with InfoNCE metrics for Euclidean space.
+#     """
+
+#     def __init__(self, num_neurons, num_units, num_output, normalize=False):
+#         super().__init__(num_neurons, num_units, num_output, normalize)
+
 @register("offset10-model")
 class Offset10Model(_OffsetModel, ConvolutionalModelMixin):
-    """CEBRA model with a 10 sample receptive field."""
+    """Improved CEBRA model with a 10 sample receptive field and additional enhancements."""
 
-    def __init__(self, num_neurons, num_units, num_output, normalize=True):
+    def __init__(self, num_neurons, num_units, num_output, normalize=True, 
+                 kernel_sizes=(2, 3), time_offset=(5, 5), dropout_rate=0.3):
+        """
+        Initialize the Offset10Model with flexible kernel sizes, dropout, and batch normalization.
+        
+        Parameters:
+            num_neurons (int): Number of input neurons.
+            num_units (int): Number of hidden units in each layer.
+            num_output (int): Number of output neurons.
+            normalize (bool): Whether to normalize the output. Default is True.
+            kernel_sizes (tuple): Kernel sizes for convolutional layers. Default is (2, 3).
+            time_offset (tuple): Offset for time-series processing. Default is (5, 5).
+            dropout_rate (float): Dropout rate for regularization. Default is 0.3.
+        """
         if num_units < 1:
-            raise ValueError(
-                f"Hidden dimension needs to be at least 1, but got {num_units}."
-            )
+            raise ValueError(f"Hidden dimension needs to be at least 1, but got {num_units}.")
+        
+        self.time_offset = time_offset
+
+        # Convolutional layers with batch normalization and dropout
         super().__init__(
-            nn.Conv1d(num_neurons, num_units, 2),
+            nn.Conv1d(num_neurons, num_units, kernel_sizes[0]),
             nn.GELU(),
-            cebra_layers._Skip(nn.Conv1d(num_units, num_units, 3), nn.GELU()),
-            cebra_layers._Skip(nn.Conv1d(num_units, num_units, 3), nn.GELU()),
-            cebra_layers._Skip(nn.Conv1d(num_units, num_units, 3), nn.GELU()),
-            nn.Conv1d(num_units, num_output, 3),
+            nn.BatchNorm1d(num_units),  # Batch normalization
+            nn.Dropout(dropout_rate),   # Dropout for regularization
+            
+            cebra_layers._Skip(nn.Conv1d(num_units, num_units, kernel_sizes[1]), nn.GELU()),
+            nn.BatchNorm1d(num_units),
+            nn.Dropout(dropout_rate),
+            
+            cebra_layers._Skip(nn.Conv1d(num_units, num_units, kernel_sizes[1]), nn.GELU()),
+            nn.BatchNorm1d(num_units),
+            nn.Dropout(dropout_rate),
+            
+            cebra_layers._Skip(nn.Conv1d(num_units, num_units, kernel_sizes[1]), nn.GELU()),
+            nn.BatchNorm1d(num_units),
+            nn.Dropout(dropout_rate),
+
+            nn.Conv1d(num_units, num_output, kernel_sizes[1]),  # Output layer
             num_input=num_neurons,
             num_output=num_output,
-            normalize=normalize,
+            normalize=normalize
         )
 
     def get_offset(self) -> cebra.data.datatypes.Offset:
-        """See :py:meth:`~.Model.get_offset`"""
-        return cebra.data.Offset(5, 5)
+        """Define the offset for time-series data."""
+        return cebra.data.Offset(*self.time_offset)
 
+    def forward(self, x):
+        # Custom forward method if additional functionality is needed
+        return super().forward(x)
 
+    @staticmethod
+    def init_weights(m):
+        """Custom weight initialization for better convergence."""
+        if isinstance(m, nn.Conv1d):
+            nn.init.xavier_uniform_(m.weight)
+
+# Improved MSE model
 @register("offset10-model-mse")
 class Offset10ModelMSE(Offset10Model):
-    """Symmetric model with 10 sample receptive field, without normalization.
+    """Symmetric model with 10 sample receptive field, without normalization for Euclidean space."""
 
-    Suitable for use with InfoNCE metrics for Euclidean space.
-    """
-
-    def __init__(self, num_neurons, num_units, num_output, normalize=False):
-        super().__init__(num_neurons, num_units, num_output, normalize)
-
+    def __init__(self, num_neurons, num_units, num_output, kernel_sizes=(2, 3), time_offset=(5, 5), dropout_rate=0.3):
+        super().__init__(num_neurons, num_units, num_output, normalize=False, 
+                         kernel_sizes=kernel_sizes, time_offset=time_offset, dropout_rate=dropout_rate)
 
 @register("offset5-model")
 class Offset5Model(_OffsetModel, ConvolutionalModelMixin):
