@@ -319,19 +319,19 @@ class Offset10Model(_OffsetModel, ConvolutionalModelMixin):
         super().__init__(
             nn.Conv1d(num_neurons, num_units, kernel_sizes[0]),
             nn.GELU(),
-            nn.BatchNorm1d(num_units),  # Batch normalization
+            # nn.BatchNorm1d(num_units),  # Batch normalization
             nn.Dropout(dropout_rate),   # Dropout for regularization
             
             cebra_layers._Skip(nn.Conv1d(num_units, num_units, kernel_sizes[1]), nn.GELU()),
-            nn.BatchNorm1d(num_units),
+            # nn.BatchNorm1d(num_units),
             nn.Dropout(dropout_rate),
             
             cebra_layers._Skip(nn.Conv1d(num_units, num_units, kernel_sizes[1]), nn.GELU()),
-            nn.BatchNorm1d(num_units),
+            # nn.BatchNorm1d(num_units),
             nn.Dropout(dropout_rate),
             
             cebra_layers._Skip(nn.Conv1d(num_units, num_units, kernel_sizes[1]), nn.GELU()),
-            nn.BatchNorm1d(num_units),
+            # nn.BatchNorm1d(num_units),
             nn.Dropout(dropout_rate),
 
             nn.Conv1d(num_units, num_output, kernel_sizes[1]),  # Output layer
